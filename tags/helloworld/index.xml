@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>helloworld on Boris Jacquot</title>
+    <link>https://borisjacquot.github.io/tags/helloworld/</link>
+    <description>Recent content in helloworld on Boris Jacquot</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <lastBuildDate>Sat, 22 May 2021 00:00:00 +0000</lastBuildDate><atom:link href="https://borisjacquot.github.io/tags/helloworld/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Les conteneurs</title>
+      <link>https://borisjacquot.github.io/p/les-conteneurs/</link>
+      <pubDate>Sat, 22 May 2021 00:00:00 +0000</pubDate>
+      
+      <guid>https://borisjacquot.github.io/p/les-conteneurs/</guid>
+      <description>Les conteneurs Random things ps et pstree permettent de voir la liste des processus actifs sur la machine (package procps). Au démarrage le processus 1 sera toujours /init
+ Dans le cas d&amp;rsquo;une machine virtuelle, l&amp;rsquo;information va être traitée une première fois par la VM, puis est réinterprêtée par le noyau. (On peut skip ceci et gagner du temps avec VT-x)
+ Un conteneur =/= une VM
+Les Namespaces   Processus : Les prcessus dans le NS vont être isolés des autres.</description>
+    </item>
+    
+  </channel>
+</rss>

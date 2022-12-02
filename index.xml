@@ -1,0 +1,352 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+    <channel>
+        <title>Boris Jacquot</title>
+        <link>https://borisjacquot.github.io/</link>
+        <description>Recent content on Boris Jacquot</description>
+        <generator>Hugo -- gohugo.io</generator>
+        <language>en-us</language>
+        <lastBuildDate>Tue, 25 May 2021 00:00:00 +0000</lastBuildDate><atom:link href="https://borisjacquot.github.io/index.xml" rel="self" type="application/rss+xml" /><item>
+        <title>Stack HashiCorp</title>
+        <link>https://borisjacquot.github.io/p/stack-hashicorp/</link>
+        <pubDate>Tue, 25 May 2021 00:00:00 +0000</pubDate>
+        
+        <guid>https://borisjacquot.github.io/p/stack-hashicorp/</guid>
+        <description>&lt;img src="https://borisjacquot.github.io/p/stack-hashicorp/hashicorp.jpg" alt="Featured image of post Stack HashiCorp" /&gt;&lt;h1 id=&#34;stack-hashicorp&#34;&gt;Stack HashiCorp&lt;/h1&gt;
+&lt;blockquote&gt;
+&lt;p&gt;HashiCorp est une entreprise de software base à San Francisco en Californie. Cette entreprise propose une suite de logiciels open-source orientés service. Deux d&amp;rsquo;entre eux sont &lt;code&gt;Consul&lt;/code&gt; et &lt;code&gt;Nomad&lt;/code&gt;.
+&lt;a class=&#34;link&#34; href=&#34;https://www.hashicorp.com/&#34;  target=&#34;_blank&#34; rel=&#34;noopener&#34;
+    &gt;&amp;raquo; plus d&amp;rsquo;info&lt;/a&gt;&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;h2 id=&#34;consul&#34;&gt;Consul&lt;/h2&gt;
+&lt;p&gt;Consul est un soft permettant de faire du &lt;code&gt;service discovery&lt;/code&gt;. C&amp;rsquo;est à dire faire l&amp;rsquo;inventaire des services disponibles dans un cluster et récupérer les informations (up, down, &amp;hellip;). Il est également possible de set des &lt;code&gt;key values&lt;/code&gt; qui seront réutilisées par les services (comme Nomad par exemple).&lt;/p&gt;
+&lt;p&gt;Hello World d&amp;rsquo;un agent Consul (avec le client ayant l&amp;rsquo;ip de l&amp;rsquo;interface publique) :&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;$ consul agent -dev -client &#39;{{ GetInterfaceIP &amp;quot;ens18&amp;quot; }}&#39;
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;Lorsque l&amp;rsquo;on se rend sur &lt;code&gt;XX.XX.XX.XX:5500&lt;/code&gt;, on peut accéder au GUI de Consul :&lt;/p&gt;
+&lt;p&gt;&lt;img src=&#34;https://i.imgur.com/uqPdmhZ.png&#34; alt=&#34;consul dashboard&#34;  /&gt;&lt;/p&gt;
+&lt;p&gt;Dans notre cas, on ne voit que consul comme service car on a encore rien configuré comme service.&lt;/p&gt;
+&lt;p&gt;Pour faire de la HA (cf cours haute disponibilité), on met plusieurs serveurs Consul (on utilise pas corosync mais ça fonctionne pareil). Si on change une Key Value sur un serveur, les autres se mettent à jour automatiquement.&lt;/p&gt;
+&lt;h2 id=&#34;nomad&#34;&gt;Nomad&lt;/h2&gt;
+&lt;p&gt;Nomad est un orchestrateur. C&amp;rsquo;est à dire qu&amp;rsquo;il va gérer les services : si on lui demande n services up, il va s&amp;rsquo;arranger pour avoir toujours ces n services up. Lorsqu&amp;rsquo;on va deploy une maj, il va down, mettre à jour et up les services chacun leur tour. Il va effectuer aussi des &lt;code&gt;check&lt;/code&gt; que l&amp;rsquo;on aura configuré pour savoir si notre service est &lt;code&gt;healthy&lt;/code&gt; ou non&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Nomad va parler à Consul et lui dire &amp;ldquo;j&amp;rsquo;ai tels services qui marchent, voici leur IP, leur port, &amp;hellip;&amp;rdquo;.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;Admettons que nous ayons une image Docker simple contenant un nginx et un index.html. Nous voulons 3 serveurs qui tournent et afficher ces serveurs en tant que service dans Consul. Voici un exemple de configuration :&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;web.nomad&lt;/strong&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;pre&gt;&lt;code class=&#34;language-nomad&#34; data-lang=&#34;nomad&#34;&gt;job &amp;quot;web&amp;quot; {
+  datacenters = [&amp;quot;dc1&amp;quot;]
+  type = &amp;quot;service&amp;quot;
+
+  update {
+    max_parallel = 1
+    min_healthy_time = &amp;quot;10s&amp;quot;
+    healthy_deadline = &amp;quot;3m&amp;quot;
+    progress_deadline = &amp;quot;10m&amp;quot;
+    auto_revert = false
+    canary = 0
+  }
+  migrate {
+    max_parallel = 1
+    health_check = &amp;quot;checks&amp;quot;
+    min_healthy_time = &amp;quot;10s&amp;quot;
+    healthy_deadline = &amp;quot;5m&amp;quot;
+  }
+  
+  group &amp;quot;cache&amp;quot; {
+    # nombre de serveurs à lancer
+    count = 3
+
+    # port du serv nginx dans le container
+    network {
+      port &amp;quot;serv&amp;quot; {
+        to = 80
+      }
+    }
+
+    service {
+      name = &amp;quot;web-cache&amp;quot;
+      tags = [&amp;quot;global&amp;quot;, &amp;quot;cache&amp;quot;]
+      port = &amp;quot;serv&amp;quot;
+
+      # check à faire pour vérifier que le serv est healthy. ici on check la co tcp
+      check {
+        type     = &amp;quot;tcp&amp;quot;
+        interval = &amp;quot;10s&amp;quot;
+        timeout  = &amp;quot;2s&amp;quot;
+      }
+
+    }
+
+    restart {
+      attempts = 2
+      interval = &amp;quot;30m&amp;quot;
+
+      delay = &amp;quot;15s&amp;quot;
+
+      mode = &amp;quot;fail&amp;quot;
+    }
+
+    ephemeral_disk {
+      size = 300
+    }
+
+    # lancement d&#39;un container
+    task &amp;quot;nginx&amp;quot; {
+      driver = &amp;quot;docker&amp;quot;
+
+      config {
+        # image docker citée plus haut
+        image = &amp;quot;web-1:v1&amp;quot;
+
+        ports = [&amp;quot;serv&amp;quot;]
+      }
+
+      resources {
+        cpu    = 500 # 500 MHz
+        memory = 256 # 256MB
+      }
+
+    }
+  }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;server.conf&lt;/strong&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;pre&gt;&lt;code&gt;data_dir = &amp;quot;/var/lib/nomad&amp;quot;
+
+bind_addr = &amp;quot;0.0.0.0&amp;quot;
+
+advertise {
+    # adresse publique
+    http = &amp;quot;XX.XX.XX.XX&amp;quot;
+}
+
+server {
+    enabled = true
+    bootstrap_expect = 1
+}
+
+client {
+    enabled = true
+    # interface publique
+    network_interface = &amp;quot;ens18&amp;quot;
+}
+
+consul {
+    # adresse où se trouve consul
+    address = &amp;quot;XX.XX.XX.XX:8500&amp;quot;
+}
+
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;&lt;em&gt;(XX.XX.XX.XX fait référence à l&amp;rsquo;IP publique)&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;Il ne reste plus qu&amp;rsquo;à lancer l&amp;rsquo;agent nomad, de la même manière que Consul, et de lancer le job que nous avons configuré.&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;$ nomad agent -dev-connect -config=server.conf -log-level INFO
+$ nomad job run web.nomad
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;On obtient bien nos 3 serveurs nginx qui tournent :&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;$ nomad status
+ID   Type     Priority  Status   Submit Date
+web  service  50        running  2021-05-25T11:00:38+02:00
+
+$ docker ps
+CONTAINER ID   IMAGE      COMMAND                  CREATED       STATUS       PORTS                                                  NAMES
+0a60baada3f7   web-1:v1   &amp;quot;/docker-entrypoint.…&amp;quot;   3 hours ago   Up 3 hours   XX.XX.XX.XX:28546-&amp;gt;80/tcp, XX.XX.XX.XX:28546-&amp;gt;80/udp   nginx-6a9237b6-eae4-22e0-fbf9-b643388af041
+876db102ec67   web-1:v1   &amp;quot;/docker-entrypoint.…&amp;quot;   3 hours ago   Up 3 hours   XX.XX.XX.XX:27303-&amp;gt;80/tcp, XX.XX.XX.XX:27303-&amp;gt;80/udp   nginx-e914eb29-dd02-afe1-c8b5-10bfcd677aa5
+032903bba6c2   web-1:v1   &amp;quot;/docker-entrypoint.…&amp;quot;   3 hours ago   Up 3 hours   XX.XX.XX.XX:22854-&amp;gt;80/tcp, XX.XX.XX.XX:22854-&amp;gt;80/udp   nginx-3ef4fd44-a394-958a-0db7-84f8fdbb554c
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;Si tout s&amp;rsquo;est bien passé, on obtient alors nos services dans l&amp;rsquo;interface de Consul :&lt;/p&gt;
+&lt;p&gt;&lt;img src=&#34;https://i.imgur.com/UJrgZBc.png&#34; alt=&#34;consul services&#34;  /&gt;&lt;/p&gt;
+&lt;h2 id=&#34;intégration-de-haproxy-pour-faire-du-load-balancing&#34;&gt;Intégration de HAProxy pour faire du load balancing&lt;/h2&gt;
+&lt;p&gt;Maintenant que nos services sont enregistrés dans Consul, on peut les récupérer avec HAProxy pour faire du LB. Configurons notre HAProxy de la sorte :&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;/etc/haproxy/haproxy.cfg&lt;/strong&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;pre&gt;&lt;code&gt;global
+	# Config de base que je n&#39;ai pas modifié. Voir la doc pour plus d&#39;info
+	log /dev/log	local0
+	log /dev/log	local1 notice
+	chroot /var/lib/haproxy
+	stats socket /run/haproxy/admin.sock mode 660 level admin expose-fd listeners
+	stats timeout 30s
+	user haproxy
+	group haproxy
+	daemon
+
+	# Default SSL material locations
+	ca-base /etc/ssl/certs
+	crt-base /etc/ssl/private
+
+defaults
+	log	global
+	mode	http
+	option	httplog
+	option	dontlognull
+        timeout connect 5000
+        timeout client  50000
+        timeout server  50000
+	errorfile 400 /etc/haproxy/errors/400.http
+	errorfile 403 /etc/haproxy/errors/403.http
+	errorfile 408 /etc/haproxy/errors/408.http
+	errorfile 500 /etc/haproxy/errors/500.http
+	errorfile 502 /etc/haproxy/errors/502.http
+	errorfile 503 /etc/haproxy/errors/503.http
+	errorfile 504 /etc/haproxy/errors/504.http
+
+frontend stats
+	# on met en place un front qui affichera les stats de HAProxy sur le port 1936 (voir la doc)
+	bind :1936
+	stats uri /
+	stats show-legends
+	no log
+
+frontend www
+	# notre frontend sera sur le port 8889 et aura la backend www_back
+	bind :8889
+	default_backend www_back
+
+backend www_back
+	# on utilise l&#39;algo roundrobin pour le LB
+	balance roundrobin
+	# on utilise une template de serveur qu&#39;on pioche directement dans consul
+	# la syntaxe est _SERVICE._TAG.service.consul
+	server-template web 3 _web-cache._cache.service.consul resolvers consul resolve-opts allow-dup-ip resolve-prefer ipv4 check
+	# ces lignes sont optionnelles, c&#39;est pour que j&#39;affiche dans le response header l&#39;ip et le nom du backend utilisé
+	http-response set-header backend-ip %si:%sp
+	http-response set-header backend-name %s
+
+resolvers consul
+	# l&#39;adresse du serveur consul. Attention le port est 8600
+	nameserver consul 10.41.7.129:8600
+	accepted_payload_size 8192
+	hold valid 5s
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;On reload notre HAProxy&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;$ systemctl reload haproxy
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;Si tout s&amp;rsquo;est bien passé on a sur &lt;code&gt;XX.XX.XX.XX:8889&lt;/code&gt; un de nos serveur nginx. On peut savoir lequel en regardant le response head (&lt;code&gt;F12&lt;/code&gt;). De plus, on peut avoir une vue de nos serveurs sur le lien des stats (XX.XX.XX.XX:1936 que nous avons config) :&lt;/p&gt;
+&lt;p&gt;&lt;img src=&#34;https://i.imgur.com/WDpnZCl.png&#34; alt=&#34;haproxy dash&#34;  /&gt;&lt;/p&gt;
+&lt;p&gt;Et voilà notre petite infra est terminée !
+&lt;em&gt;that&amp;rsquo;s all folks&lt;/em&gt;&lt;/p&gt;
+</description>
+        </item>
+        <item>
+        <title>La haute disponibilité</title>
+        <link>https://borisjacquot.github.io/p/la-haute-disponibilit%C3%A9/</link>
+        <pubDate>Sat, 22 May 2021 00:00:00 +0000</pubDate>
+        
+        <guid>https://borisjacquot.github.io/p/la-haute-disponibilit%C3%A9/</guid>
+        <description>&lt;img src="https://borisjacquot.github.io/p/la-haute-disponibilit%C3%A9/haute-disponibilite.jpg" alt="Featured image of post La haute disponibilité" /&gt;&lt;h1 id=&#34;la-haute-disponibilité&#34;&gt;La haute disponibilité&lt;/h1&gt;
+&lt;h2 id=&#34;intro&#34;&gt;Intro&lt;/h2&gt;
+&lt;p&gt;Le but d&amp;rsquo;une HA est de rendre un service disponible quand un serveur est surchargé. Dans notre cas nous prendrons l&amp;rsquo;exemple d&amp;rsquo;un site web static dans un premier temps.&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;TODO: schéma&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;Nous avons notre site qui tourne sur un serveur apache, jusque ici tout va bien. Admettons que le serveur soit surchargé, comment assurer la disponibilité du site ?&lt;/p&gt;
+&lt;p&gt;-&amp;gt; on va dans un premier temps multiplier le nombre de serveurs qui font tourner le site.&lt;/p&gt;
+&lt;p&gt;Mais comment faire quand tous les serveurs sont surchargés ?&lt;/p&gt;
+&lt;h2 id=&#34;les-load-balencers-lb&#34;&gt;Les load balencers (LB)&lt;/h2&gt;
+&lt;p&gt;Il existe plusieures techno de LB :&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Apache&lt;/li&gt;
+&lt;li&gt;nginx&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;HAProxy&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;traefic&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;em&gt;A quoi ça sert ?&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;Un LB va distribuer le traffic vers les serveurs. Si un serveur tombe en panne, il va le retirer de son &lt;em&gt;pool&lt;/em&gt; et l&amp;rsquo;accès au service sera toujours possible.&lt;/p&gt;
+&lt;p&gt;Cependant, un seul LB crée un &lt;strong&gt;SPOF&lt;/strong&gt; (point de défaillance unique), c&amp;rsquo;est à dire que si il tombe, tout tombe (comme DC3 lol). Pour éviter ceci, on a la possibilité de mettre plusieurs LB. Mais comment choisir quel LB il faut utiliser ?&lt;/p&gt;
+&lt;p&gt;-&amp;gt; On utilise le système de &lt;code&gt;Quorum&lt;/code&gt;&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;On va mettre en place un nombre impair de LB afin qu&amp;rsquo;il n&amp;rsquo;y ait pas de &lt;em&gt;&amp;ldquo;vote nul&amp;rdquo;&lt;/em&gt;&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;On va les mettre en place grâce à deux techno : &lt;code&gt;corosync&lt;/code&gt; et &lt;code&gt;pacemaker&lt;/code&gt;&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;em&gt;Corosync&lt;/em&gt; va créer un cluster où les LB discutent en paires. Un LB sera désigné comme étant le &lt;em&gt;maître&lt;/em&gt; et les autres des &lt;em&gt;esclaves&lt;/em&gt;. Si le maître vient à mourir, corosync va transmettre l&amp;rsquo;information aux autres LB et ces derniers vont élire un nouveau &lt;em&gt;maître&lt;/em&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;em&gt;Pacemaker&lt;/em&gt; partage la ressource (ici l&amp;rsquo;IP). La ressource doit toujours être sur le &lt;em&gt;maître&lt;/em&gt;. Quand le &lt;em&gt;maître&lt;/em&gt; décède, Pacemaker va informer Corosync qu&amp;rsquo;il n&amp;rsquo;est plus apte à être &lt;em&gt;maître&lt;/em&gt;.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id=&#34;passage-en-dynamique&#34;&gt;Passage en dynamique&lt;/h3&gt;
+&lt;p&gt;Si maintenant notre site passe en dynamique, avec une BDD par exemple, si nous mettons simplement une BDD liée à l&amp;rsquo;API, nous nous confrontons à un SPOF à ce niveau.&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;schema&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;La solution est donc de mettre une fois de plus des LB, ainsi que plusieurs BDD.&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;ul&gt;
+&lt;li&gt;Les LB fonctionnent de la même manière.&lt;/li&gt;
+&lt;li&gt;Les BDD fonctionnent en maître-esclave + une n+1 ième sert de backup.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/blockquote&gt;
+&lt;h2 id=&#34;backbone&#34;&gt;Backbone&lt;/h2&gt;
+&lt;p&gt;&lt;em&gt;todo + schema&lt;/em&gt;&lt;/p&gt;
+&lt;h2 id=&#34;les-cdn&#34;&gt;Les CDN&lt;/h2&gt;
+&lt;p&gt;Pour être ncore plus efficace, on peut mettre un CDN avant les LB. Un CDN permet de mettre en cache des réponses à des requêtes pour éviter de passer par tout le processus vu précédemment afin de perdre le moins de temps possible.
+Une des technos utilisées est &lt;em&gt;Varnish&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;schema maybe&lt;/em&gt;&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;&lt;strong&gt;Cloudflare&lt;/strong&gt; sert, entre autre, de cache.&lt;/p&gt;
+&lt;/blockquote&gt;
+</description>
+        </item>
+        <item>
+        <title>Les conteneurs</title>
+        <link>https://borisjacquot.github.io/p/les-conteneurs/</link>
+        <pubDate>Sat, 22 May 2021 00:00:00 +0000</pubDate>
+        
+        <guid>https://borisjacquot.github.io/p/les-conteneurs/</guid>
+        <description>&lt;img src="https://borisjacquot.github.io/p/les-conteneurs/conteneurs.jpg" alt="Featured image of post Les conteneurs" /&gt;&lt;h1 id=&#34;les-conteneurs&#34;&gt;Les conteneurs&lt;/h1&gt;
+&lt;h2 id=&#34;random-things&#34;&gt;Random things&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;ps&lt;/code&gt; et &lt;code&gt;pstree&lt;/code&gt; permettent de voir la liste des processus actifs sur la machine (package &lt;code&gt;procps&lt;/code&gt;).
+Au démarrage le processus &lt;code&gt;1&lt;/code&gt; sera toujours &lt;code&gt;/init&lt;/code&gt;&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Dans le cas d&amp;rsquo;une machine virtuelle, l&amp;rsquo;information va être traitée une première fois par la VM, puis est réinterprêtée par le noyau.
+(On peut skip ceci et gagner du temps avec &lt;code&gt;VT-x&lt;/code&gt;)&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;&lt;strong&gt;Un conteneur =/= une VM&lt;/strong&gt;&lt;/p&gt;
+&lt;h2 id=&#34;les-namespaces&#34;&gt;Les Namespaces&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;strong&gt;Processus&lt;/strong&gt; : Les prcessus dans le NS vont être isolés des autres. À l&amp;rsquo;intérieur du NS, le premier processus aura donc l&amp;rsquo;ID &lt;code&gt;1&lt;/code&gt; (cf /init). Du point de vue du noyau, ce processus aura un autre ID qui lui est propre. Il est impossible, à l&amp;rsquo;intérieur du NS, de voir les autres processus de la machine. Cependant, l&amp;rsquo;inverse est vrai. &lt;em&gt;(cf pstree dans chaque)&lt;/em&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;strong&gt;Réseau&lt;/strong&gt; : On peut créer une interface virtuelle qui sera alors connectée (ou non) à une interface de la machine (via un bridge par exemple).&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;strong&gt;User / group&lt;/strong&gt; : Les utilisateurs dans un NS peuvent avoir le même ID que ceux de la machine. Il peut donc y avoir des faille (par exemple : avoir l&amp;rsquo;ID 0 dans le NS donne les droits du l&amp;rsquo;ID 0 de la machine = root). Pour y remédier, on utilise &lt;em&gt;l&amp;rsquo;UID shifting&lt;/em&gt; =&amp;gt; càd on va dire que tous les UID seront +4000 (par exemple) par rapport à ceux de la machine, donc plus sécurisant.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&#34;docker&#34;&gt;Docker&lt;/h2&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Un ensemble de NS crée un conteneur. On le crée grâce à un &lt;code&gt;clone()&lt;/code&gt; &lt;em&gt;(fork ou thread)&lt;/em&gt;.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;Docker va simplifier la création de conteneurs en s&amp;rsquo;occupant de créer tous les NS. On peut choisir ce qu&amp;rsquo;on met dedans grâce à une image.&lt;/p&gt;
+&lt;p&gt;Par exemple : pour un site web static qui tourne sous nginx, on va procéder de la sorte :&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;On va créer un fichier &lt;code&gt;Dockerfile&lt;/code&gt; avec toutes les instructions pour installer le conteneur (comment build l&amp;rsquo;image). Dans notre cas on pourra écrire dedans :&lt;/li&gt;
+&lt;/ul&gt;
+&lt;pre&gt;&lt;code&gt;# on dl l&#39;image que l&#39;on souhaite =&amp;gt; ici nginx qui tourne sur alpine (une distro avec le minimum légal pour que ce soit léger)
+FROM nginx:alpine
+
+# on lance des commandes pour le build
+RUN apt update &amp;amp;&amp;amp; apt install [...]
+
+# on copie notre index (par exemple)
+COPY ./docker/base/fpm/resources/index.html /usr/local/nginx/html
+
+# on copie notre script qui sera le proc 1 selon ce qu&#39;on veut
+COPY ./docker/base/fpm/resources/index.html /entrypoint
+
+# on défini un user pour exécuter les choses =&amp;gt; on donne peu de droits pour éviter les failles
+USER www-data
+
+# on choisi l&#39;espace de travail
+WORKDIR &amp;quot;/application&amp;quot;
+
+# on choisi notre point d&#39;entrée (donc le proc 0)
+ENTRYPOINT [&amp;quot;/entrypoint&amp;quot;]
+&lt;/code&gt;&lt;/pre&gt;&lt;ul&gt;
+&lt;li&gt;Ensuite on peut lancer :&lt;/li&gt;
+&lt;/ul&gt;
+&lt;pre&gt;&lt;code&gt;$ docker build -t my-image:v0.1 .
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;&lt;em&gt;&lt;strong&gt;et hop!&lt;/strong&gt;&lt;/em&gt;&lt;/p&gt;
+</description>
+        </item>
+        
+    </channel>
+</rss>
